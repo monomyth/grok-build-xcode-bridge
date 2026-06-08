@@ -1,83 +1,94 @@
 # grok-build-xcode-bridge
 
-Bridge to use local Grok Build (`grok agent stdio`) as an external agent in Xcode via the Agent Client Protocol (ACP).
+Bridge that lets you use your local **Grok Build** CLI (`grok agent stdio`) as an external agent inside Xcode's Intelligence / Composer (Xcode 26/27+).
 
-## Why
+It implements the minimal parts of the Agent Client Protocol (ACP) over stdio that Xcode requires.
 
-Xcode's external agent support (Intelligence / Composer) speaks a JSON-RPC protocol over stdio (ACP). The native `grok agent stdio` implementation only emits a notification for `session/new` and does not return the required `result` containing `sessionId`. Xcode therefore marks the agent "pending" and never delivers user prompts.
+## Why this exists
 
-This small Python shim correctly implements the handshake Xcode needs, then delegates the actual work to your real local `grok` CLI (with the right working directory and project context).
+The native `grok agent stdio` does not return a proper JSON-RPC `result` for the `session/new` request — only a notification. Xcode therefore shows the agent as "pending" and never delivers prompts.
+
+This bridge fixes the handshake (always returns `{"sessionId": "..."}`), captures the project `cwd` and any MCP servers Xcode injects, then delegates real work to your local `grok` CLI with the correct working directory.
+
+## Requirements
+
+- macOS + Xcode 26 or later with external agents enabled
+- Local `grok` CLI installed and authenticated (the one from `~/.grok/bin/grok` or in your `PATH`)
+- Python 3 (the bridge is a single stdlib-only script)
 
 ## Quick Start
 
-1. Place the bridge somewhere on disk and make it executable:
+1. Install the bridge:
 
    ```bash
    mkdir -p ~/bin
-   # copy or download xcode-grok-bridge.py
+   curl -fsSL https://raw.githubusercontent.com/monomyth/grok-build-xcode-bridge/master/xcode-grok-bridge.py \
+     -o ~/bin/xcode-grok-bridge.py
    chmod +x ~/bin/xcode-grok-bridge.py
    ```
 
-2. In Xcode → Settings → Intelligence, add/edit a "Grok Build" external agent:
+   Or just copy `xcode-grok-bridge.py` from this repo.
 
-   - Executable: `~/bin/xcode-grok-bridge.py`
-   - Interpreter: `python3` (or the full path from `which python3`)
+2. In **Xcode → Settings → Intelligence**, add or edit an external agent:
+   - **Executable**: `~/bin/xcode-grok-bridge.py`
+   - **Interpreter**: `python3` (or the full path from `which python3`)
 
-3. Kill stale processes:
+3. Kill any old agent processes:
 
    ```bash
    pkill -f 'grok.*stdio|xcode-grok-bridge'
    ```
 
-4. File → New → Conversation (or the Intelligence panel + button) and send a prompt.
+4. In Xcode: **File → New → Conversation** (or the + button in the Intelligence panel) and send a prompt.
 
-5. Debug traffic:
+It should no longer stay stuck in "pending".
+
+5. Watch what is happening:
 
    ```bash
    tail -f ~/.grok/logs/xcode-acp.log
    ```
 
-See [ACP_TEST_PROMPT.md](ACP_TEST_PROMPT.md) for a prompt that exercises the full protocol (sessionId, cwd, tools, MCP visibility, etc.).
+## How it works
 
-## How it works (minimal ACP)
+- `initialize` → returns protocol version, capabilities, auth methods, and model info
+- `session/new` → **returns a real `result` containing `sessionId`** (the key fix) and stores the `cwd` + injected `mcpServers`
+- `session/prompt` → extracts the user message, builds a prompt that includes recent history + project location, runs your local `grok` CLI via subprocess with `--cwd`, streams the answer back via `session/update` (`agent_message_chunk`), then replies with `result {}`
+- Unknown methods and `skills-reload` → reply with an empty success result (prevents -32601 errors that can confuse Xcode)
 
-- `initialize` → returns protocolVersion + capabilities + authMethods + modelState
-- `session/new` → **returns a real result** `{ "sessionId": "..." }` (this is the critical fix) + optional announcement notification
-- `session/prompt` → extracts text, calls local grok CLI with `--cwd`, emits `session/update` (agent_message_chunk), then `result {}`
-- Unknown methods / `skills-reload` → empty success result (avoids -32601 errors that can confuse Xcode)
+All raw JSON-RPC traffic is logged (prefixed `IN :` / `OUT:`).
 
-All raw JSON-RPC lines are logged (IN:/OUT:).
-
-The inner `grok` invocation receives a reconstructed prompt that includes recent history and the project `cwd` captured from `session/new`.
+The inner `grok` process sees a reconstructed prompt and the real project directory. It currently uses its normal tools (the Xcode-injected `xcode-tools` MCP is not yet proxied through the bridge).
 
 ## Configuration
 
-- `GROK_BIN` environment variable: force a specific path to the grok binary.
-- Log file: `~/.grok/logs/xcode-acp.log` (created automatically).
+| Variable   | Description                                      |
+|------------|--------------------------------------------------|
+| `GROK_BIN` | Full path to the `grok` binary (overrides discovery) |
 
-## Current Status & Limitations
+The log file is written to `~/.grok/logs/xcode-acp.log` (created automatically).
 
-- Core roundtrip works: handshake, session creation, prompt delivery, delegation to real grok, basic streaming back to Xcode UI.
-- The `xcode-tools` MCP server injected by Xcode in `session/new` is **not yet proxied**. The agent inside only has its normal tools + filesystem access via the delegated CLI.
-- Streaming is coarse (single final message chunk). Thoughts and incremental tool updates are not forwarded yet.
-- Per-conversation process model means in-memory history is limited.
+## Limitations
 
-## Roadmap / Good first contributions
+- The `xcode-tools` MCP server that Xcode injects is **not proxied** yet. The delegated `grok` only has standard tools + direct filesystem access via the project `cwd`.
+- Streaming is basic (one final `agent_message_chunk` per prompt). No `agent_thought_chunk` or live `tool_call` updates yet.
+- History is kept only in-memory for the lifetime of the bridge process.
+- Every "New Conversation" in Xcode often spawns a fresh bridge process.
 
-- Proxy the xcode-tools MCP (or a useful subset) so the agent can build, run, and inspect the Xcode project context directly.
-- Parse tool calls / reasoning from the grok CLI output (or switch to direct API) and emit rich `session/update` events (`agent_thought_chunk`, `tool_call`, etc.).
-- Persistent session history under `~/.grok/sessions/`.
-- Better packaging (Homebrew, installer, launchd agent, etc.).
-- Support for embedded context / images when Xcode sends them.
+## Roadmap / Contributions welcome
 
-## Handoff note
+- Proxy (or selectively forward) the `xcode-tools` MCP so the agent can build, run, and inspect the Xcode workspace directly.
+- Parse tool calls and reasoning from grok output (or switch to the Grok API) and emit rich `session/update` notifications.
+- Persistent per-session history under `~/.grok/sessions/`.
+- Packaging (Homebrew formula, launchd plist, one-click registration, etc.).
+- Support for images / embedded context when Xcode sends them.
 
-The entire `xcode-grok-bridge.py` is deliberately a single commented file so you can paste it into Cursor Composer, Claude Projects, another Grok session, etc. and say:
+The entire `xcode-grok-bridge.py` is a single, heavily commented file with no dependencies. You can paste the whole script into Cursor Composer, Claude, another Grok session, etc. and say:
 
-> "Improve this Xcode Grok ACP bridge. First priority: make the xcode-tools MCP that Xcode injects actually usable by the inner agent."
+> "Improve this Xcode Grok ACP bridge. Priority: make the xcode-tools MCP actually usable by the inner agent."
 
-See the module docstring inside the .py for the detailed handoff brief.
+See the module docstring at the top of `xcode-grok-bridge.py` for the detailed handoff brief and protocol notes.
 
 ## License
 
-MIT (or whatever you prefer for a tiny bridge script).
+MIT License. See [LICENSE](LICENSE) for details.
