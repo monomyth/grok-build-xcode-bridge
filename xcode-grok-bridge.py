@@ -26,41 +26,43 @@ add proper streaming of thoughts/tool calls, etc."
 
 Quick start
 -----------
-1. Save this file, e.g.:
+1. Install the bridge:
+
+   ```bash
    mkdir -p ~/bin
-   cp xcode-grok-bridge.py ~/bin/
+   curl -fsSL https://raw.githubusercontent.com/monomyth/grok-build-xcode-bridge/master/xcode-grok-bridge.py \
+     -o ~/bin/xcode-grok-bridge.py
    chmod +x ~/bin/xcode-grok-bridge.py
+   ```
 
-2. In Xcode:
-   Settings → Intelligence → (add or edit your Grok agent)
-     Executable: /Users/you/bin/xcode-grok-bridge.py   (or wherever you put it)
-     Interpreter: python3   (or /opt/homebrew/bin/python3, `which python3`)
+   Or simply copy `xcode-grok-bridge.py` from the repo.
 
-3. (Recommended) In the agent settings also pass:
-   --always-approve   (or handle approvals in the bridge later)
+2. In Xcode → Settings → Intelligence, add/edit your Grok Build external agent:
+   - Executable: `~/bin/xcode-grok-bridge.py`
+   - Interpreter: `python3` (or full path from `which python3`)
 
-4. Kill any old grok/Xcode agent processes:
-   pkill -f "grok.*stdio|xcode-grok-bridge"
+3. Kill stale processes:
 
-5. In Xcode: File → New → Conversation (or the + in the Intelligence panel)
-   Send a prompt. It should no longer stay "pending".
+   ```bash
+   pkill -f 'grok.*stdio|xcode-grok-bridge'
+   ```
 
-6. Watch traffic:
+4. File → New → Conversation (or the + in the Intelligence panel) and send a prompt.
+
+5. Watch traffic:
+
+   ```bash
    tail -f ~/.grok/logs/xcode-acp.log
+   ```
 
-See ACP_TEST_PROMPT.md for a thorough end-to-end protocol validation prompt
-you can paste into a fresh conversation.
+See `ACP_TEST_PROMPT.md` in the repo for a thorough protocol validation prompt.
 
-Current limitations (as of creation)
-------------------------------------
-- No proxying of the "xcode-tools" MCP server that Xcode injects in session/new.
-  The inner grok only sees its normal tools + the project cwd.
-- Streaming is basic (one final agent_message_chunk). No agent_thought_chunk or
-  incremental tool_call updates yet.
-- grok path is discovered (GROK_BIN env, ~/.grok/bin/grok, or PATH).
-- History is only in-memory per process (Xcode launches a new process per
-  "New Conversation" in many cases).
-- Hardcoded to delegate to the CLI rather than the Grok API directly.
+Current limitations
+-------------------
+- The `xcode-tools` MCP server injected by Xcode is **not proxied** yet.
+- Streaming is basic (single final `agent_message_chunk`).
+- In-memory history only (new bridge process per many "New Conversation"s).
+- Delegates to the local CLI (no direct Grok API yet).
 
 Roadmap ideas for contributors / hand-off models
 ------------------------------------------------
