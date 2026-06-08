@@ -340,15 +340,18 @@ def handle_session_prompt(params: Dict[str, Any], req_id: Any) -> None:
 
     # Support /model and /m as a convenience over ACP (these are Grok TUI commands,
     # not part of the ACP spec, so the bridge has to implement them).
-    requested_model, user_text = extract_command_and_text(raw_text)
+    requested_model, cleaned_text = extract_command_and_text(raw_text)
+
+    active_model = session.get("current_model")
 
     if requested_model:
-        session["current_model"] = requested_model
-        log_stderr(f"Model switch via command -> {requested_model}")
-        # If the entire message was just the model command, give a short confirmation
-        # and don't bother the inner model.
-        if not user_text or user_text.strip() == raw_text.strip():
-            confirmation = f"Switched to model: {requested_model}"
+        if requested_model != active_model:
+            session["current_model"] = requested_model
+            active_model = requested_model
+            log_stderr(f"Model switch via command -> {requested_model}")
+
+            # Always make the switch visible in the Xcode UI
+            switch_note = f"Switched to model: {requested_model}"
             send({
                 "jsonrpc": "2.0",
                 "method": "session/update",
@@ -356,17 +359,42 @@ def handle_session_prompt(params: Dict[str, Any], req_id: Any) -> None:
                     "sessionId": sid,
                     "update": {
                         "sessionUpdate": "agent_message_chunk",
-                        "content": {"type": "text", "text": confirmation},
+                        "content": {"type": "text", "text": switch_note},
                     },
                 },
             })
+
+        # If after removing the command(s) there's no real user content left,
+        # we're done (the switch note above already went out).
+        if not cleaned_text or not cleaned_text.strip():
             send({"jsonrpc": "2.0", "id": req_id, "result": {}})
             session["history"].append(f"User: {raw_text}")
-            session["history"].append(f"Assistant: {confirmation}")
+            session["history"].append(f"Assistant: Switched to {requested_model}")
             return
 
-    active_model = session.get("current_model")
-    prompt_text = user_text or raw_text
+    prompt_text = cleaned_text or raw_text
+
+    # Give a clear, immediate answer for model identity questions from the bridge's
+    # own session state (more reliable than asking the inner model).
+    lower_p = (prompt_text or "").lower()
+    if any(q in lower_p for q in ["what model", "which model", "current model", "what are you using", "model are you"]):
+        model_name = active_model or "grok-build (default)"
+        local_answer = f"Current model for this conversation: {model_name}"
+        send({
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": sid,
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": local_answer},
+                },
+            },
+        })
+        send({"jsonrpc": "2.0", "id": req_id, "result": {}})
+        session["history"].append(f"User: {raw_text}")
+        session["history"].append(f"Assistant: {local_answer}")
+        return
 
     log_stderr(f"session/prompt for {sid}: {prompt_text[:100]}")
 
