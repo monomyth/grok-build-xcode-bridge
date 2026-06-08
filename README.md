@@ -31,23 +31,20 @@ This bridge fixes the handshake (always returns `{"sessionId": "..."}`), capture
 
 2. In **Xcode → Settings → Intelligence**, add or edit an external agent:
    - **Executable**: `~/bin/xcode-grok-bridge.py`
-   - **Interpreter**: `python3` (or the full path from `which python3`)
+   - **Interpreter**: *(optional)* `python3`  
+     (most users can leave this blank — Xcode will use the shebang)
 
-3. Kill any old agent processes:
+3. In Xcode: **File → New → Conversation** (or the + button in the Intelligence panel) and send a prompt.
 
-   ```bash
-   pkill -f 'grok.*stdio|xcode-grok-bridge'
-   ```
+   It should no longer stay stuck in "pending".
 
-4. In Xcode: **File → New → Conversation** (or the + button in the Intelligence panel) and send a prompt.
-
-It should no longer stay stuck in "pending".
-
-5. Watch what is happening:
+4. (Optional) Watch traffic for debugging:
 
    ```bash
    tail -f ~/.grok/logs/xcode-acp.log
    ```
+
+> **Note on old agents**: If you previously registered a different Grok agent and it's behaving strangely, you can remove the old entry in Xcode settings or run `pkill -f 'grok.*stdio|xcode-grok-bridge'` to terminate leftover processes.
 
 ## How it works
 
