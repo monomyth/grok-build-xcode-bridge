@@ -57,6 +57,19 @@ All raw JSON-RPC traffic is logged (prefixed `IN :` / `OUT:`).
 
 The inner `grok` process sees a reconstructed prompt and the real project directory. It currently uses its normal tools (the Xcode-injected `xcode-tools` MCP is not yet proxied through the bridge).
 
+## Slash commands (Grok-specific)
+
+Grok's `/commands` (e.g. `/model`) are **not** part of the ACP protocol — they are features of the Grok TUI/client.
+
+The bridge implements a small useful subset so you can use them from Xcode:
+
+- `/model <name>` or `/m <name>`
+  - Switches the model for the rest of the current conversation.
+  - Supports shorthands: `composer`, `composer 2.5`, `build`, plus the real IDs (`grok-composer-2.5-fast`, `grok-build`).
+  - Example in Xcode: type `/model Composer 2.5` or `/m grok-composer-2.5-fast`
+
+Everything else you type (including other `/` commands) is passed through as normal user text.
+
 ## Configuration
 
 | Variable   | Description                                      |
