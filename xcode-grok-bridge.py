@@ -37,23 +37,22 @@ Quick start
 
    Or simply copy `xcode-grok-bridge.py` from the repo.
 
-2. In Xcode → Settings → Intelligence, add/edit your Grok Build external agent:
+2. In Xcode → Settings → Intelligence, add or edit your Grok Build external agent:
    - Executable: `~/bin/xcode-grok-bridge.py`
-   - Interpreter: `python3` (or full path from `which python3`)
+   - Interpreter: *(optional)* `python3`
+     (you can usually leave this blank — Xcode will honor the shebang)
 
-3. Kill stale processes:
+3. File → New → Conversation (or the + in the Intelligence panel) and send a prompt.
 
-   ```bash
-   pkill -f 'grok.*stdio|xcode-grok-bridge'
-   ```
-
-4. File → New → Conversation (or the + in the Intelligence panel) and send a prompt.
-
-5. Watch traffic:
+4. (Optional) Watch traffic:
 
    ```bash
    tail -f ~/.grok/logs/xcode-acp.log
    ```
+
+> If a previously registered Grok agent is stuck or you want to clean up old processes,
+> you can remove the old agent in Xcode settings or run:
+>   pkill -f 'grok.*stdio|xcode-grok-bridge'
 
 See `ACP_TEST_PROMPT.md` in the repo for a thorough protocol validation prompt.
 
