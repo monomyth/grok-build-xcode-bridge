@@ -214,7 +214,7 @@ def extract_command_and_text(text: str) -> tuple[Optional[str], str]:
         break
 
     cleaned = "\n".join(lines).strip()
-    return model, cleaned or text
+    return model, cleaned
 
 
 def find_grok_binary() -> str:
