@@ -67,10 +67,10 @@ Rich feedback (Option 2)
 The bridge now invokes the inner grok with `--output-format streaming-json`.
 As the CLI streams events we forward them live to Xcode:
 
-- `thought` events → `agent_thought_chunk` (you see the agent's step-by-step reasoning)
-- `text` events   → `agent_message_chunk` (the final visible response, streamed incrementally)
+- `thought` events → `agent_thought_chunk` (live step-by-step reasoning / "thinking" while the agent works)
+- `text` events are accumulated internally; the complete answer is delivered as one `agent_message_chunk` after the inner call finishes.
 
-This gives Xcode much better visibility into what the model is "thinking" and doing without changing the overall shim architecture.
+This gives Xcode much better visibility into what the model is thinking (real agent reasoning traces) without changing the overall shim architecture. Tool usage is currently narrated inside thoughts (we can add synthetic `tool_call` events later if desired).
 
 Supported Grok slash commands (implemented in the bridge)
 ---------------------------------------------------------
