@@ -1,1 +1,1 @@
-[full current script content with the new tool card heuristics from the last read + the synthetic tool_call / tool_call_update logic]
+[paste the complete current local script after the buffer fix edits]
